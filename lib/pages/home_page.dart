@@ -13,6 +13,12 @@ import '../services/analysis_service.dart';
 import '../services/combination_generator_service.dart';
 import '../services/number_parser_service.dart';
 
+enum _FileSlot {
+  left,
+  right,
+  generation,
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -24,28 +30,43 @@ class _HomePageState extends State<HomePage> {
   final _parser = NumberParserService();
   final _analysisService = AnalysisService();
   final _generator = CombinationGeneratorService();
-  final _referenceController = TextEditingController(text: '01.02.03.04.05.06+09');
+  final _leftReferenceController =
+      TextEditingController(text: '01.02.03.04.05.06+09');
+  final _rightReferenceController =
+      TextEditingController(text: '07.08.09.10.11.12+10');
 
-  List<ParsedFileResult> _fileAResults = [];
-  List<ParsedFileResult> _fileBResults = [];
-  ReferenceNumber? _reference;
-  AnalysisResult? _analysis;
+  List<ParsedFileResult> _leftFileResults = [];
+  List<ParsedFileResult> _rightFileResults = [];
+  List<ParsedFileResult> _generationFileResults = [];
+  ReferenceNumber? _leftReference;
+  ReferenceNumber? _rightReference;
+  ReferenceNumber? _confirmedReference;
+  AnalysisResult? _leftAnalysis;
+  AnalysisResult? _rightAnalysis;
+  AnalysisResult? _confirmedAnalysis;
   GenerationSettings _settings = const GenerationSettings();
   List<GeneratedCombination> _generated = [];
   bool _busy = false;
 
-  List<NumberRecord> get _recordsA =>
-      _fileAResults.expand((result) => result.records).toList();
-  List<NumberRecord> get _recordsB =>
-      _fileBResults.expand((result) => result.records).toList();
+  List<NumberRecord> get _leftRecords =>
+      _leftFileResults.expand((result) => result.records).toList();
+  List<NumberRecord> get _rightRecords =>
+      _rightFileResults.expand((result) => result.records).toList();
+  List<NumberRecord> get _combinedAnalysisRecords => [
+        ..._leftRecords,
+        ..._rightRecords,
+      ];
+  List<NumberRecord> get _generationRecords =>
+      _generationFileResults.expand((result) => result.records).toList();
 
   @override
   void dispose() {
-    _referenceController.dispose();
+    _leftReferenceController.dispose();
+    _rightReferenceController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickFiles({required bool forAnalysis}) async {
+  Future<void> _pickFiles(_FileSlot slot) async {
     setState(() => _busy = true);
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -72,13 +93,24 @@ class _HomePageState extends State<HomePage> {
         parsedResults.add(_parser.parseFile(fileName: file.name, content: content));
       }
       setState(() {
-        if (forAnalysis) {
-          _fileAResults = parsedResults;
-          _analysis = null;
-          _generated = [];
-        } else {
-          _fileBResults = parsedResults;
-          _generated = [];
+        switch (slot) {
+          case _FileSlot.left:
+            _leftFileResults = parsedResults;
+            _leftAnalysis = null;
+            _leftReference = null;
+            _confirmedAnalysis = null;
+            _confirmedReference = null;
+            _generated = [];
+          case _FileSlot.right:
+            _rightFileResults = parsedResults;
+            _rightAnalysis = null;
+            _rightReference = null;
+            _confirmedAnalysis = null;
+            _confirmedReference = null;
+            _generated = [];
+          case _FileSlot.generation:
+            _generationFileResults = parsedResults;
+            _generated = [];
         }
       });
     } catch (error) {
@@ -90,20 +122,32 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _runAnalysis() {
-    if (_recordsA.isEmpty) {
-      _showMessage('请先导入分析文件 A');
+  void _runSideAnalysis({required bool isLeft}) {
+    final records = isLeft ? _leftRecords : _rightRecords;
+    final controller =
+        isLeft ? _leftReferenceController : _rightReferenceController;
+    final sideName = isLeft ? '左边' : '右边';
+
+    if (records.isEmpty) {
+      _showMessage('请先导入$sideName分析文件');
       return;
     }
     try {
-      final reference = _parser.parseReference(_referenceController.text);
+      final reference = _parser.parseReference(controller.text);
       final analysis = _analysisService.analyze(
-        records: _recordsA,
+        records: records,
         reference: reference,
       );
       setState(() {
-        _reference = reference;
-        _analysis = analysis;
+        if (isLeft) {
+          _leftReference = reference;
+          _leftAnalysis = analysis;
+        } else {
+          _rightReference = reference;
+          _rightAnalysis = analysis;
+        }
+        _confirmedAnalysis = null;
+        _confirmedReference = null;
         _generated = [];
       });
     } on FormatException catch (error) {
@@ -111,19 +155,83 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _generate() {
-    if (_analysis == null || _reference == null) {
-      _showMessage('请先完成文件 A 分析');
+  void _runConfirmedAnalysis() {
+    if (_leftAnalysis == null ||
+        _rightAnalysis == null ||
+        _leftReference == null ||
+        _rightReference == null) {
+      _showMessage('请先完成左边和右边的步骤 3 分析');
       return;
     }
-    if (_recordsB.isEmpty) {
-      _showMessage('请先导入组合文件 B');
+    if (_combinedAnalysisRecords.isEmpty) {
+      _showMessage('左右两边分析文件为空，无法综合确认');
+      return;
+    }
+
+    final confirmedReference = _buildConfirmedReference();
+    final confirmedAnalysis = _analysisService.analyze(
+      records: _combinedAnalysisRecords,
+      reference: confirmedReference,
+    );
+
+    setState(() {
+      _confirmedReference = confirmedReference;
+      _confirmedAnalysis = confirmedAnalysis;
+      _generated = [];
+    });
+  }
+
+  ReferenceNumber _buildConfirmedReference() {
+    final left = _leftReference!;
+    final right = _rightReference!;
+    final combinedRedFrequency = _countRed(_combinedAnalysisRecords);
+    final combinedBlueFrequency = _countBlue(_combinedAnalysisRecords);
+    final allReferenceReds = <int>{...left.redBalls, ...right.redBalls};
+
+    final scored = <int, int>{};
+    for (final number in allReferenceReds) {
+      var score = combinedRedFrequency[number] ?? 0;
+      if (left.redBalls.contains(number) && right.redBalls.contains(number)) {
+        score += 20;
+      }
+      if (_leftAnalysis?.coreRedNumbers.contains(number) ?? false) {
+        score += 10;
+      }
+      if (_rightAnalysis?.coreRedNumbers.contains(number) ?? false) {
+        score += 10;
+      }
+      scored[number] = score;
+    }
+
+    for (final entry in combinedRedFrequency.entries.take(12)) {
+      scored.putIfAbsent(entry.key, () => entry.value);
+    }
+
+    final redBalls = scored.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final selectedReds = redBalls.take(6).map((entry) => entry.key).toList()
+      ..sort();
+
+    final leftBlueCount = combinedBlueFrequency[left.blueBall] ?? 0;
+    final rightBlueCount = combinedBlueFrequency[right.blueBall] ?? 0;
+    final blueBall = rightBlueCount > leftBlueCount ? right.blueBall : left.blueBall;
+
+    return ReferenceNumber(redBalls: selectedReds, blueBall: blueBall);
+  }
+
+  void _generate() {
+    if (_confirmedAnalysis == null || _confirmedReference == null) {
+      _showMessage('请先完成步骤 4 综合确认');
+      return;
+    }
+    if (_generationRecords.isEmpty) {
+      _showMessage('请先导入组合文件');
       return;
     }
     final generated = _generator.generate(
-      reference: _reference!,
-      analysis: _analysis!,
-      fileBRecords: _recordsB,
+      reference: _confirmedReference!,
+      analysis: _confirmedAnalysis!,
+      fileBRecords: _generationRecords,
       settings: _settings,
     );
     setState(() => _generated = generated);
@@ -162,7 +270,9 @@ class _HomePageState extends State<HomePage> {
   String _resultText() {
     final buffer = StringBuffer()
       ..writeln('数据分析仪生成结果')
-      ..writeln('参考号码：${_reference?.display ?? ''}')
+      ..writeln('综合确认号码：${_confirmedReference?.display ?? ''}')
+      ..writeln('左边参考号码：${_leftReference?.display ?? ''}')
+      ..writeln('右边参考号码：${_rightReference?.display ?? ''}')
       ..writeln();
     for (var i = 0; i < _generated.length; i++) {
       final item = _generated[i];
@@ -199,20 +309,15 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.all(16),
             children: [
               _introCard(),
+              _mirrorInputCard(),
+              _sideAnalysisResultCard(),
+              _confirmedAnalysisCard(),
+              _settingsCard(stepTitle: '第五步：设置生成条件'),
               _importCard(
-                title: '第一步：导入分析文件 A',
-                description: '可选择一个或多个 TXT 购买情况文件，用于分析参考号码规律。',
-                results: _fileAResults,
-                onPressed: () => _pickFiles(forAnalysis: true),
-              ),
-              _referenceCard(),
-              if (_analysis != null) _analysisCard(_analysis!),
-              _settingsCard(),
-              _importCard(
-                title: '第五步：导入组合文件 B',
+                title: '第六步：导入组合文件',
                 description: '可选择一个或多个 TXT 文件，用于生成相似风格的新组合。',
-                results: _fileBResults,
-                onPressed: () => _pickFiles(forAnalysis: false),
+                results: _generationFileResults,
+                onPressed: () => _pickFiles(_FileSlot.generation),
               ),
               _generateCard(),
               const SizedBox(height: 32),
@@ -230,9 +335,9 @@ class _HomePageState extends State<HomePage> {
 
   Widget _introCard() {
     return _sectionCard(
-      title: '离线购买数据分析',
+      title: '双侧离线购买数据分析',
       child: const Text(
-        '软件根据用户导入的购买情况文件和参考号码，分析出现次数、概率、共现关系、搭配规律和相似组合，再结合第二批文件生成类似组合。全程离线，不需要网络。',
+        '左边和右边各导入一组购买情况文件并输入一组参考号码，系统先分别分析，再把左右文件和左右结果综合确认，最后用综合确认结果生成相似组合。全程离线，不需要网络。',
       ),
     );
   }
@@ -273,47 +378,205 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _referenceCard() {
+  Widget _mirrorInputCard() {
     return _sectionCard(
-      title: '第二步：输入参考号码',
+      title: '步骤 1-2：左右两边导入文件并输入参考号码',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 360,
+              child: _sideInputPanel(
+                title: '左边一组',
+                description: '左边分析文件，可选择一个或多个 TXT 文件。',
+                controller: _leftReferenceController,
+                results: _leftFileResults,
+                onPickFiles: () => _pickFiles(_FileSlot.left),
+                onAnalyze: () => _runSideAnalysis(isLeft: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 360,
+              child: _sideInputPanel(
+                title: '右边一组',
+                description: '右边分析文件，可选择一个或多个 TXT 文件。',
+                controller: _rightReferenceController,
+                results: _rightFileResults,
+                onPickFiles: () => _pickFiles(_FileSlot.right),
+                onAnalyze: () => _runSideAnalysis(isLeft: false),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sideInputPanel({
+    required String title,
+    required String description,
+    required TextEditingController controller,
+    required List<ParsedFileResult> results,
+    required VoidCallback onPickFiles,
+    required VoidCallback onAnalyze,
+  }) {
+    final total = results.fold<int>(0, (sum, item) => sum + item.records.length);
+    final errorCount =
+        results.fold<int>(0, (sum, item) => sum + item.errors.length);
+
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(description),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onPickFiles,
+              icon: const Icon(Icons.upload_file),
+              label: const Text('选择 TXT 文件'),
+            ),
+            if (results.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('已导入 ${results.length} 个文件，识别 $total 组，异常 $errorCount 条。'),
+            ],
+            const SizedBox(height: 12),
+            const Text('参考号码格式：01.02.03.04.05.06+09'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: '参考号码',
+              ),
+              keyboardType: TextInputType.text,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onAnalyze,
+              icon: const Icon(Icons.analytics),
+              label: const Text('分析这一边'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sideAnalysisResultCard() {
+    if (_leftAnalysis == null && _rightAnalysis == null) {
+      return _sectionCard(
+        title: '第三步：左右两边分别分析结果',
+        child: const Text('完成左边或右边分析后，这里会显示对应的规律分析结果。'),
+      );
+    }
+
+    return _sectionCard(
+      title: '第三步：左右两边分别分析结果',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 360,
+              child: _analysisPanel(
+                title: '左边分析结果',
+                reference: _leftReference,
+                analysis: _leftAnalysis,
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 360,
+              child: _analysisPanel(
+                title: '右边分析结果',
+                reference: _rightReference,
+                analysis: _rightAnalysis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _confirmedAnalysisCard() {
+    return _sectionCard(
+      title: '第四步：综合左右结果再度分析确认',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('格式固定为：01.02.03.04.05.06+09'),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _referenceController,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              labelText: '参考号码',
-            ),
-            keyboardType: TextInputType.text,
+          const Text(
+            '系统会综合左边步骤 3、右边步骤 3 的分析结果，并结合左右两边步骤 1 导入的全部文件，再生成一组综合确认号码和综合分析结果。后续生成组合会使用这里的综合确认结果。',
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _runAnalysis,
-            icon: const Icon(Icons.analytics),
-            label: const Text('开始分析文件 A'),
+            onPressed: _runConfirmedAnalysis,
+            icon: const Icon(Icons.fact_check),
+            label: const Text('综合确认'),
           ),
+          if (_confirmedAnalysis != null && _confirmedReference != null) ...[
+            const SizedBox(height: 16),
+            _analysisPanel(
+              title: '综合确认结果：${_confirmedReference!.display}',
+              reference: _confirmedReference,
+              analysis: _confirmedAnalysis,
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _analysisCard(AnalysisResult analysis) {
-    return _sectionCard(
-      title: '第三步：规律分析结果',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(analysis.summaryText),
-          const SizedBox(height: 16),
-          _subTitle('参考红球次数'),
-          _statWrap(
-            analysis.referenceRedStats.map(
-              (stat) => '${_pad(stat.number)}：${stat.count}次，${_percent(stat.probability)}',
+  Widget _analysisPanel({
+    required String title,
+    required ReferenceNumber? reference,
+    required AnalysisResult? analysis,
+  }) {
+    if (analysis == null || reference == null) {
+      return Card(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text('暂未分析'),
+        ),
+      );
+    }
+
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text('参考号码：${reference.display}'),
+            const SizedBox(height: 8),
+            Text(analysis.summaryText),
+            const SizedBox(height: 16),
+            _subTitle('参考红球次数'),
+            _statWrap(
+              analysis.referenceRedStats.map(
+                (stat) =>
+                    '${_pad(stat.number)}：${stat.count}次，${_percent(stat.probability)}',
+              ),
+            ),
           const SizedBox(height: 12),
           Text(
             '蓝球 ${_pad(analysis.referenceBlueStat.number)}：'
@@ -345,12 +608,13 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
+      ),
     );
   }
 
-  Widget _settingsCard() {
+  Widget _settingsCard({required String stepTitle}) {
     return _sectionCard(
-      title: '第四步：设置生成条件',
+      title: stepTitle,
       child: Column(
         children: [
           _dropdown<int>(
@@ -379,176 +643,4 @@ class _HomePageState extends State<HomePage> {
               BlueBallMode.replace => '允许替换蓝球',
             },
             onChanged: (value) => setState(
-              () => _settings = _settings.copyWith(blueBallMode: value),
-            ),
-          ),
-          _dropdown<SimilarityLevel>(
-            label: '相似度强度',
-            value: _settings.similarityLevel,
-            items: SimilarityLevel.values,
-            labelBuilder: (value) => switch (value) {
-              SimilarityLevel.low => '低',
-              SimilarityLevel.medium => '中',
-              SimilarityLevel.high => '高',
-            },
-            onChanged: (value) => setState(
-              () => _settings = _settings.copyWith(similarityLevel: value),
-            ),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('结构接近参考号码'),
-            value: _settings.keepStructureClose,
-            onChanged: (value) => setState(
-              () => _settings = _settings.copyWith(keepStructureClose: value),
-            ),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('排除完全相同组合'),
-            value: _settings.excludeSameAsReference,
-            onChanged: (value) => setState(
-              () => _settings = _settings.copyWith(excludeSameAsReference: value),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _generateCard() {
-    return _sectionCard(
-      title: '第六步：生成相似组合',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FilledButton.icon(
-            onPressed: _generate,
-            icon: const Icon(Icons.auto_awesome),
-            label: const Text('生成相似组合'),
-          ),
-          if (_generated.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text('共生成 ${_generated.length} 组相似组合'),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _copyResults,
-                  icon: const Icon(Icons.copy),
-                  label: const Text('复制全部'),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: _exportResults,
-                  icon: const Icon(Icons.ios_share),
-                  label: const Text('导出 TXT'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ..._generated.asMap().entries.map(
-                  (entry) => _resultItem(entry.key + 1, entry.value),
-                ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _resultItem(int index, GeneratedCombination item) {
-    return Card(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '推荐组合 $index：${item.record.display}',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            ...item.reasons.map((reason) => Text('• $reason')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionCard({required String title, required Widget child}) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _subTitle(String text) {
-    return Text(
-      text,
-      style: const TextStyle(fontWeight: FontWeight.w700),
-    );
-  }
-
-  Widget _statWrap(Iterable<String> items) {
-    final list = items.toList();
-    if (list.isEmpty) {
-      return const Text('暂无数据');
-    }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: list.map((text) => Chip(label: Text(text))).toList(),
-    );
-  }
-
-  Widget _dropdown<T>({
-    required String label,
-    required T value,
-    required List<T> items,
-    required ValueChanged<T> onChanged,
-    String Function(T value)? labelBuilder,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: DropdownButtonFormField<T>(
-        initialValue: value,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-        items: items
-            .map(
-              (item) => DropdownMenuItem<T>(
-                value: item,
-                child: Text(labelBuilder?.call(item) ?? item.toString()),
-              ),
-            )
-            .toList(),
-        onChanged: (value) {
-          if (value != null) {
-            onChanged(value);
-          }
-        },
-      ),
-    );
-  }
-
-  String _pad(int value) => value.toString().padLeft(2, '0');
-
-  String _percent(double value) => '${(value * 100).toStringAsFixed(1)}%';
-}
+              () => _settings = _settings.cop
