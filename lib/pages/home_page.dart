@@ -24,8 +24,7 @@ class _HomePageState extends State<HomePage> {
   final _parser = NumberParserService();
   final _analysisService = AnalysisService();
   final _generator = CombinationGeneratorService();
-  final _referenceController =
-      TextEditingController(text: '01.02.03.04.05.06+09');
+  final _referenceController = TextEditingController(text: '01.02.03.04.05.06+09');
 
   List<ParsedFileResult> _fileAResults = [];
   List<ParsedFileResult> _fileBResults = [];
@@ -70,9 +69,7 @@ class _HomePageState extends State<HomePage> {
           continue;
         }
         final content = await File(file.path!).readAsString();
-        parsedResults.add(
-          _parser.parseFile(fileName: file.name, content: content),
-        );
+        parsedResults.add(_parser.parseFile(fileName: file.name, content: content));
       }
       setState(() {
         if (forAnalysis) {
@@ -131,7 +128,7 @@ class _HomePageState extends State<HomePage> {
     );
     setState(() => _generated = generated);
     if (generated.isEmpty) {
-      _showMessage('没有生成符合当前条件的组合，请降低相似度或减少保留数量');
+      _showMessage('没有生成符合当前条件的组合，请调整相似度或保留参考红球数量');
     }
   }
 
@@ -246,14 +243,8 @@ class _HomePageState extends State<HomePage> {
     required List<ParsedFileResult> results,
     required VoidCallback onPressed,
   }) {
-    final total = results.fold<int>(
-      0,
-      (sum, item) => sum + item.records.length,
-    );
-    final errorCount = results.fold<int>(
-      0,
-      (sum, item) => sum + item.errors.length,
-    );
+    final total = results.fold<int>(0, (sum, item) => sum + item.records.length);
+    final errorCount = results.fold<int>(0, (sum, item) => sum + item.errors.length);
     return _sectionCard(
       title: title,
       child: Column(
@@ -320,8 +311,7 @@ class _HomePageState extends State<HomePage> {
           _subTitle('参考红球次数'),
           _statWrap(
             analysis.referenceRedStats.map(
-              (stat) =>
-                  '${_pad(stat.number)}：${stat.count}次，${_percent(stat.probability)}',
+              (stat) => '${_pad(stat.number)}：${stat.count}次，${_percent(stat.probability)}',
             ),
           ),
           const SizedBox(height: 12),
@@ -372,11 +362,11 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           _dropdown<int>(
-            label: '最少保留参考红球',
-            value: _settings.minKeepRed,
-            items: const [1, 2, 3, 4, 5],
+            label: '允许保留参考红球',
+            value: _settings.keepRedCount,
+            items: const [0, 1, 2, 3, 4, 5],
             onChanged: (value) => setState(
-              () => _settings = _settings.copyWith(minKeepRed: value),
+              () => _settings = _settings.copyWith(keepRedCount: value),
             ),
           ),
           _dropdown<BlueBallMode>(
