@@ -41,6 +41,13 @@ jobs:
             flutter pub get
 
       - run:
+          name: 安装 Android 原生构建工具
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+            yes | sdkmanager "cmake;3.22.1"
+
+      - run:
           name: 检查代码
           command: |
             source "$BASH_ENV"
