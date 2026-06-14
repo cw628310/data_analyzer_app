@@ -93,4 +93,3 @@ class NumberParserService {
     return ReferenceNumber(redBalls: redBalls, blueBall: blueBall);
   }
 }
-
