@@ -26,8 +26,10 @@ jobs:
             manifest.write_text(text)
             for path in Path("android/app/src").glob("**/AndroidManifest.xml"):
                 content = path.read_text()
-                content = content.replace('<uses-permission android:name="android.permission.INTERNET"/>', '')
-                content = content.replace('<uses-permission android:name="android.permission.INTERNET" />', '')
+                if path.name == "AndroidManifest.xml" and "src/main" in str(path):
+                    permission = '<uses-permission android:name="android.permission.INTERNET" />'
+                    if permission not in content and 'android.permission.INTERNET' not in content:
+                        content = content.replace("<application", f"{permission}\n    <application", 1)
                 path.write_text(content)
             for gradle_file in [Path("android/app/build.gradle"), Path("android/app/build.gradle.kts")]:
                 if gradle_file.exists():
@@ -114,7 +116,7 @@ jobs:
                 }
             }
             EOF
-            flutter build apk --debug
+            flutter build apk --debug --dart-define=LEARNING_API_BASE_URL="${LEARNING_API_BASE_URL:-}"
 
       - store_artifacts:
           path: build/app/outputs/flutter-apk/app-debug.apk
