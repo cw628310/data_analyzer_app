@@ -630,4 +630,274 @@ class _HomePageState extends State<HomePage> {
                   .map((entry) => '${_pad(entry.key)}：${entry.value}次'),
             ),
             const SizedBox(height: 12),
-         
+            _subTitle('结构'),
+            Text(
+              '奇偶 ${analysis.structureProfile.oddEvenText}，'
+              '大小 ${analysis.structureProfile.sizeText}，'
+              '三区 ${analysis.structureProfile.zoneText}，'
+              '和值 ${analysis.structureProfile.sum}，'
+              '跨度 ${analysis.structureProfile.span}',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryBox(String text) {
+    final paragraphs = text.split('\n\n');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '分析总结',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          ...paragraphs.map(
+            (paragraph) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(paragraph),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _settingsCard({required String stepTitle}) {
+    return _sectionCard(
+      title: stepTitle,
+      child: Column(
+        children: [
+          _dropdown<int>(
+            label: '生成数量',
+            value: _settings.count,
+            items: const [5, 10, 20, 30],
+            onChanged: (value) => setState(
+              () => _settings = _settings.copyWith(count: value),
+            ),
+          ),
+          _dropdown<int>(
+            label: '允许保留参考红球',
+            value: _settings.keepRedCount,
+            items: const [0, 1, 2, 3, 4, 5],
+            onChanged: (value) => setState(
+              () => _settings = _settings.copyWith(keepRedCount: value),
+            ),
+          ),
+          _dropdown<BlueBallMode>(
+            label: '蓝球处理',
+            value: _settings.blueBallMode,
+            items: BlueBallMode.values,
+            labelBuilder: (value) => switch (value) {
+              BlueBallMode.keep => '必须保留参考蓝球',
+              BlueBallMode.prefer => '优先保留参考蓝球',
+              BlueBallMode.replace => '允许替换蓝球',
+            },
+            onChanged: (value) => setState(
+              () => _settings = _settings.copyWith(blueBallMode: value),
+            ),
+          ),
+          _dropdown<SimilarityLevel>(
+            label: '相似度强度',
+            value: _settings.similarityLevel,
+            items: SimilarityLevel.values,
+            labelBuilder: (value) => switch (value) {
+              SimilarityLevel.low => '低',
+              SimilarityLevel.medium => '中',
+              SimilarityLevel.high => '高',
+            },
+            onChanged: (value) => setState(
+              () => _settings = _settings.copyWith(similarityLevel: value),
+            ),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('结构接近参考号码'),
+            value: _settings.keepStructureClose,
+            onChanged: (value) => setState(
+              () => _settings = _settings.copyWith(keepStructureClose: value),
+            ),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('排除完全相同组合'),
+            value: _settings.excludeSameAsReference,
+            onChanged: (value) => setState(
+              () => _settings = _settings.copyWith(excludeSameAsReference: value),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _generateCard() {
+    return _sectionCard(
+      title: '第七步：生成相似组合',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FilledButton.icon(
+            onPressed: _generate,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('生成相似组合'),
+          ),
+          if (_generated.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('共生成 ${_generated.length} 组相似组合'),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _copyResults,
+                  icon: const Icon(Icons.copy),
+                  label: const Text('复制全部'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: _exportResults,
+                  icon: const Icon(Icons.ios_share),
+                  label: const Text('导出 TXT'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ..._generated.asMap().entries.map(
+                  (entry) => _resultItem(entry.key + 1, entry.value),
+                ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _resultItem(int index, GeneratedCombination item) {
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '推荐组合 $index：${item.record.display}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ...item.reasons.map((reason) => Text('• $reason')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionCard({required String title, required Widget child}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _subTitle(String text) {
+    return Text(
+      text,
+      style: const TextStyle(fontWeight: FontWeight.w700),
+    );
+  }
+
+  Widget _statWrap(Iterable<String> items) {
+    final list = items.toList();
+    if (list.isEmpty) {
+      return const Text('暂无数据');
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: list.map((text) => Chip(label: Text(text))).toList(),
+    );
+  }
+
+  Widget _dropdown<T>({
+    required String label,
+    required T value,
+    required List<T> items,
+    required ValueChanged<T> onChanged,
+    String Function(T value)? labelBuilder,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: DropdownButtonFormField<T>(
+        initialValue: value,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+        items: items
+            .map(
+              (item) => DropdownMenuItem<T>(
+                value: item,
+                child: Text(labelBuilder?.call(item) ?? item.toString()),
+              ),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value != null) {
+            onChanged(value);
+          }
+        },
+      ),
+    );
+  }
+
+  String _pad(int value) => value.toString().padLeft(2, '0');
+
+  String _percent(double value) => '${(value * 100).toStringAsFixed(1)}%';
+
+  Map<int, int> _countRed(List<NumberRecord> records) {
+    final result = <int, int>{};
+    for (final record in records) {
+      for (final number in record.redBalls) {
+        result[number] = (result[number] ?? 0) + 1;
+      }
+    }
+    return Map.fromEntries(
+      result.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
+    );
+  }
+
+  Map<int, int> _countBlue(List<NumberRecord> records) {
+    final result = <int, int>{};
+    for (final record in records) {
+      result[record.blueBall] = (result[record.blueBall] ?? 0) + 1;
+    }
+    return Map.fromEntries(
+      result.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
+    );
+  }
+}
