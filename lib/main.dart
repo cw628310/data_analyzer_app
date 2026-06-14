@@ -22,3 +22,7 @@ class DataAnalyzerApp extends StatelessWidget {
     );
   }
 }
+
+class MyApp extends DataAnalyzerApp {
+  const MyApp({super.key});
+}
