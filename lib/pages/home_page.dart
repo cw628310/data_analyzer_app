@@ -13,6 +13,7 @@ import '../services/analysis_service.dart';
 import '../services/analysis_summary_service.dart';
 import '../services/combination_generator_service.dart';
 import '../services/number_parser_service.dart';
+import '../services/remote_learning_service.dart';
 
 enum _FileSlot {
   left,
@@ -31,6 +32,7 @@ class _HomePageState extends State<HomePage> {
   final _parser = NumberParserService();
   final _analysisService = AnalysisService();
   final _summaryService = AnalysisSummaryService();
+  final _remoteLearningService = RemoteLearningService();
   final _generator = CombinationGeneratorService();
   final _leftReferenceController =
       TextEditingController(text: '01.02.03.04.05.06+09');
@@ -46,6 +48,9 @@ class _HomePageState extends State<HomePage> {
   AnalysisResult? _leftAnalysis;
   AnalysisResult? _rightAnalysis;
   AnalysisResult? _confirmedAnalysis;
+  String? _leftSummaryText;
+  String? _rightSummaryText;
+  String? _confirmedSummaryText;
   GenerationSettings _settings = const GenerationSettings();
   List<GeneratedCombination> _generated = [];
   bool _busy = false;
@@ -100,15 +105,19 @@ class _HomePageState extends State<HomePage> {
             _leftFileResults = parsedResults;
             _leftAnalysis = null;
             _leftReference = null;
+            _leftSummaryText = null;
             _confirmedAnalysis = null;
             _confirmedReference = null;
+            _confirmedSummaryText = null;
             _generated = [];
           case _FileSlot.right:
             _rightFileResults = parsedResults;
             _rightAnalysis = null;
             _rightReference = null;
+            _rightSummaryText = null;
             _confirmedAnalysis = null;
             _confirmedReference = null;
+            _confirmedSummaryText = null;
             _generated = [];
           case _FileSlot.generation:
             _generationFileResults = parsedResults;
@@ -144,12 +153,27 @@ class _HomePageState extends State<HomePage> {
         if (isLeft) {
           _leftReference = reference;
           _leftAnalysis = analysis;
+          _leftSummaryText = _summaryService.buildSideSummary(
+            sideName: '左边',
+            records: records,
+            reference: reference,
+            analysis: analysis,
+          );
+          _learnSideSummary(isLeft: true);
         } else {
           _rightReference = reference;
           _rightAnalysis = analysis;
+          _rightSummaryText = _summaryService.buildSideSummary(
+            sideName: '右边',
+            records: records,
+            reference: reference,
+            analysis: analysis,
+          );
+          _learnSideSummary(isLeft: false);
         }
         _confirmedAnalysis = null;
         _confirmedReference = null;
+        _confirmedSummaryText = null;
         _generated = [];
       });
     } on FormatException catch (error) {
@@ -179,7 +203,69 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _confirmedReference = confirmedReference;
       _confirmedAnalysis = confirmedAnalysis;
+      _confirmedSummaryText = _summaryService.buildCombinedSummary(
+        records: _combinedAnalysisRecords,
+        leftReference: _leftReference!,
+        rightReference: _rightReference!,
+        confirmedReference: confirmedReference,
+        leftAnalysis: _leftAnalysis!,
+        rightAnalysis: _rightAnalysis!,
+        confirmedAnalysis: confirmedAnalysis,
+      );
       _generated = [];
+    });
+    _learnConfirmedSummary();
+  }
+
+  Future<void> _learnSideSummary({required bool isLeft}) async {
+    final reference = isLeft ? _leftReference : _rightReference;
+    final summary = isLeft ? _leftSummaryText : _rightSummaryText;
+    if (reference == null || summary == null || summary.isEmpty) {
+      return;
+    }
+
+    final optimized = await _remoteLearningService.learnSideSummary(
+      sideName: isLeft ? '左边' : '右边',
+      reference: reference.display,
+      summary: summary,
+    );
+
+    if (!mounted || optimized == summary) {
+      return;
+    }
+
+    setState(() {
+      if (isLeft) {
+        _leftSummaryText = optimized;
+      } else {
+        _rightSummaryText = optimized;
+      }
+    });
+  }
+
+  Future<void> _learnConfirmedSummary() async {
+    if (_confirmedReference == null ||
+        _leftReference == null ||
+        _rightReference == null ||
+        _confirmedSummaryText == null ||
+        _confirmedSummaryText!.isEmpty) {
+      return;
+    }
+
+    final currentSummary = _confirmedSummaryText!;
+    final optimized = await _remoteLearningService.learnCombinedSummary(
+      reference: _confirmedReference!.display,
+      leftReference: _leftReference!.display,
+      rightReference: _rightReference!.display,
+      summary: currentSummary,
+    );
+
+    if (!mounted || optimized == currentSummary) {
+      return;
+    }
+
+    setState(() {
+      _confirmedSummaryText = optimized;
     });
   }
 
@@ -496,14 +582,7 @@ class _HomePageState extends State<HomePage> {
                 title: '左边分析结果',
                 reference: _leftReference,
                 analysis: _leftAnalysis,
-                summaryText: _leftAnalysis == null || _leftReference == null
-                    ? null
-                    : _summaryService.buildSideSummary(
-                        sideName: '左边',
-                        records: _leftRecords,
-                        reference: _leftReference!,
-                        analysis: _leftAnalysis!,
-                      ),
+                summaryText: _leftSummaryText,
               ),
             ),
             const SizedBox(width: 12),
@@ -513,14 +592,7 @@ class _HomePageState extends State<HomePage> {
                 title: '右边分析结果',
                 reference: _rightReference,
                 analysis: _rightAnalysis,
-                summaryText: _rightAnalysis == null || _rightReference == null
-                    ? null
-                    : _summaryService.buildSideSummary(
-                        sideName: '右边',
-                        records: _rightRecords,
-                        reference: _rightReference!,
-                        analysis: _rightAnalysis!,
-                      ),
+                summaryText: _rightSummaryText,
               ),
             ),
           ],
@@ -550,15 +622,7 @@ class _HomePageState extends State<HomePage> {
               title: '综合确认结果：${_confirmedReference!.display}',
               reference: _confirmedReference,
               analysis: _confirmedAnalysis,
-              summaryText: _summaryService.buildCombinedSummary(
-                records: _combinedAnalysisRecords,
-                leftReference: _leftReference!,
-                rightReference: _rightReference!,
-                confirmedReference: _confirmedReference!,
-                leftAnalysis: _leftAnalysis!,
-                rightAnalysis: _rightAnalysis!,
-                confirmedAnalysis: _confirmedAnalysis!,
-              ),
+              summaryText: _confirmedSummaryText,
             ),
           ],
         ],
