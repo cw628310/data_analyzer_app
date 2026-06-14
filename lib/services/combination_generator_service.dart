@@ -19,7 +19,6 @@ class CombinationGeneratorService {
     final bBlueFrequency = _countBlue(fileBRecords);
     final bPartnerNumbers = _partnerNumbersFromB(reference, fileBRecords);
     final candidates = <int>{
-      ...reference.redBalls,
       ...analysis.partnerNumbers.keys.take(12),
       ...bPartnerNumbers.keys.take(12),
       ...bRedFrequency.keys.take(12),
@@ -70,7 +69,7 @@ class CombinationGeneratorService {
         continue;
       }
       final keepCount = redBalls.where(reference.redBalls.contains).length;
-      if (keepCount < settings.minKeepRed) {
+      if (keepCount != settings.keepRedCount) {
         continue;
       }
 
@@ -110,7 +109,7 @@ class CombinationGeneratorService {
     required GenerationSettings settings,
     required int attempt,
   }) {
-    final keepTarget = _keepTarget(settings, attempt);
+    final keepTarget = settings.keepRedCount.clamp(0, 5).toInt();
     final kept = _rankReferenceForKeep(reference, analysis)
         .skip(attempt % max(1, 6 - keepTarget + 1))
         .take(keepTarget)
@@ -132,26 +131,21 @@ class CombinationGeneratorService {
       if (result.length == 6) {
         break;
       }
+      if (reference.redBalls.contains(number)) {
+        continue;
+      }
       result.add(number);
     }
 
     var fill = 1;
     while (result.length < 6 && fill <= 33) {
-      result.add(fill);
+      if (!reference.redBalls.contains(fill)) {
+        result.add(fill);
+      }
       fill++;
     }
 
     return result.toList();
-  }
-
-  int _keepTarget(GenerationSettings settings, int attempt) {
-    final base = switch (settings.similarityLevel) {
-      SimilarityLevel.low => settings.minKeepRed,
-      SimilarityLevel.medium => max(settings.minKeepRed, 3),
-      SimilarityLevel.high => max(settings.minKeepRed, 4),
-    };
-    final offset = attempt % 3 == 0 ? 1 : 0;
-    return min(5, max(settings.minKeepRed, base + offset));
   }
 
   List<int> _rankReferenceForKeep(
