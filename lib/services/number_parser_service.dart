@@ -69,7 +69,7 @@ class NumberParserService {
     ).firstMatch(value);
 
     if (match == null) {
-      throw FormatException('请输入正确格式，例如：01.02.03.04.05.06+09');
+      throw const FormatException('请输入正确格式，例如：01.02.03.04.05.06+09');
     }
 
     final redBalls = match
@@ -81,15 +81,16 @@ class NumberParserService {
     final blueBall = int.parse(match.group(2)!);
 
     if (redBalls.toSet().length != 6) {
-      throw FormatException('红球不能重复');
+      throw const FormatException('红球不能重复');
     }
     if (redBalls.any((n) => n < 1 || n > 33)) {
-      throw FormatException('红球范围应为 01-33');
+      throw const FormatException('红球范围应为 01-33');
     }
     if (blueBall < 1 || blueBall > 16) {
-      throw FormatException('蓝球范围应为 01-16');
+      throw const FormatException('蓝球范围应为 01-16');
     }
 
     return ReferenceNumber(redBalls: redBalls, blueBall: blueBall);
   }
 }
+
