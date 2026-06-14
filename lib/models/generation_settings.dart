@@ -13,7 +13,7 @@ enum SimilarityLevel {
 class GenerationSettings {
   const GenerationSettings({
     this.count = 10,
-    this.minKeepRed = 3,
+    this.keepRedCount = 3,
     this.blueBallMode = BlueBallMode.prefer,
     this.similarityLevel = SimilarityLevel.medium,
     this.useFileAFrequency = true,
@@ -24,7 +24,7 @@ class GenerationSettings {
   });
 
   final int count;
-  final int minKeepRed;
+  final int keepRedCount;
   final BlueBallMode blueBallMode;
   final SimilarityLevel similarityLevel;
   final bool useFileAFrequency;
@@ -35,7 +35,7 @@ class GenerationSettings {
 
   GenerationSettings copyWith({
     int? count,
-    int? minKeepRed,
+    int? keepRedCount,
     BlueBallMode? blueBallMode,
     SimilarityLevel? similarityLevel,
     bool? useFileAFrequency,
@@ -46,7 +46,7 @@ class GenerationSettings {
   }) {
     return GenerationSettings(
       count: count ?? this.count,
-      minKeepRed: minKeepRed ?? this.minKeepRed,
+      keepRedCount: keepRedCount ?? this.keepRedCount,
       blueBallMode: blueBallMode ?? this.blueBallMode,
       similarityLevel: similarityLevel ?? this.similarityLevel,
       useFileAFrequency: useFileAFrequency ?? this.useFileAFrequency,
