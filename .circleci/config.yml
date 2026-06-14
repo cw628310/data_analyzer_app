@@ -41,7 +41,10 @@ jobs:
           command: |
             apt-get update
             apt-get install -y ninja-build cmake
-            yes | sdkmanager "cmake;3.22.1" "ndk;27.0.12077973"
+            set +o pipefail
+            yes | sdkmanager --licenses
+            set -o pipefail
+            sdkmanager --install "cmake;3.22.1" "ndk;27.0.12077973"
             echo 'export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"' >> "$BASH_ENV"
             echo 'export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.0.12077973"' >> "$BASH_ENV"
 
