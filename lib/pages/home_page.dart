@@ -24,7 +24,8 @@ class _HomePageState extends State<HomePage> {
   final _parser = NumberParserService();
   final _analysisService = AnalysisService();
   final _generator = CombinationGeneratorService();
-  final _referenceController = TextEditingController(text: '01.02.03.04.05.06+09');
+  final _referenceController =
+      TextEditingController(text: '01.02.03.04.05.06+09');
 
   List<ParsedFileResult> _fileAResults = [];
   List<ParsedFileResult> _fileBResults = [];
@@ -69,7 +70,9 @@ class _HomePageState extends State<HomePage> {
           continue;
         }
         final content = await File(file.path!).readAsString();
-        parsedResults.add(_parser.parseFile(fileName: file.name, content: content));
+        parsedResults.add(
+          _parser.parseFile(fileName: file.name, content: content),
+        );
       }
       setState(() {
         if (forAnalysis) {
@@ -151,7 +154,12 @@ class _HomePageState extends State<HomePage> {
       '${dir.path}/数据分析仪结果_${DateTime.now().millisecondsSinceEpoch}.txt',
     );
     await file.writeAsString(_resultText());
-    await Share.shareXFiles([XFile(file.path)], text: '数据分析仪生成结果');
+    await SharePlus.instance.share(
+      ShareParams(
+        text: '数据分析仪生成结果',
+        files: [XFile(file.path)],
+      ),
+    );
   }
 
   String _resultText() {
@@ -238,8 +246,14 @@ class _HomePageState extends State<HomePage> {
     required List<ParsedFileResult> results,
     required VoidCallback onPressed,
   }) {
-    final total = results.fold<int>(0, (sum, item) => sum + item.records.length);
-    final errorCount = results.fold<int>(0, (sum, item) => sum + item.errors.length);
+    final total = results.fold<int>(
+      0,
+      (sum, item) => sum + item.records.length,
+    );
+    final errorCount = results.fold<int>(
+      0,
+      (sum, item) => sum + item.errors.length,
+    );
     return _sectionCard(
       title: title,
       child: Column(
@@ -306,7 +320,8 @@ class _HomePageState extends State<HomePage> {
           _subTitle('参考红球次数'),
           _statWrap(
             analysis.referenceRedStats.map(
-              (stat) => '${_pad(stat.number)}：${stat.count}次，${_percent(stat.probability)}',
+              (stat) =>
+                  '${_pad(stat.number)}：${stat.count}次，${_percent(stat.probability)}',
             ),
           ),
           const SizedBox(height: 12),
