@@ -31,12 +31,14 @@ jobs:
                 path.write_text(content)
             for gradle_file in [Path("android/app/build.gradle"), Path("android/app/build.gradle.kts")]:
                 if gradle_file.exists():
+                    import re
                     content = gradle_file.read_text()
-                    content = content.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
-                    content = content.replace("compileSdk flutter.compileSdkVersion", "compileSdk 36")
-                    content = content.replace("targetSdk = flutter.targetSdkVersion", "targetSdk = 36")
-                    content = content.replace("targetSdkVersion flutter.targetSdkVersion", "targetSdkVersion 36")
+                    content = re.sub(r"compileSdk\s*=\s*[^\n]+", "compileSdk = 36", content)
+                    content = re.sub(r"compileSdkVersion\s+[^\n]+", "compileSdkVersion 36", content)
+                    content = re.sub(r"targetSdk\s*=\s*[^\n]+", "targetSdk = 36", content)
+                    content = re.sub(r"targetSdkVersion\s+[^\n]+", "targetSdkVersion 36", content)
                     gradle_file.write_text(content)
+                    print(gradle_file.read_text())
             PY
 
       - run:
