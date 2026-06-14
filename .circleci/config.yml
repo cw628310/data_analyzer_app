@@ -20,6 +20,7 @@ jobs:
           command: |
             source "$BASH_ENV"
             flutter create --platforms=android --project-name=data_analyzer_app .
+            rm -rf test
             python3 - \<<'PY'
             from pathlib import Path
             manifest = Path("android/app/src/main/AndroidManifest.xml")
