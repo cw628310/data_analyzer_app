@@ -215,7 +215,7 @@ class _HomePageState extends State<HomePage> {
           ),
           if (_busy)
             Container(
-              color: Colors.black.withOpacity(0.18),
+              color: Colors.black.withAlpha(46),
               child: const Center(child: CircularProgressIndicator()),
             ),
         ],
