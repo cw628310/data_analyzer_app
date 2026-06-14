@@ -3,22 +3,19 @@ version: 2.1
 jobs:
   build_apk:
     docker:
-      - image: cimg/android:2024.01
+      - image: ghcr.io/cirruslabs/flutter:stable
     steps:
       - checkout
 
       - run:
-          name: 安装 Flutter
+          name: 检查 Flutter 环境
           command: |
-            git clone https://github.com/flutter/flutter.git -b stable --depth 1 ~/flutter
-            echo 'export PATH="$HOME/flutter/bin:$PATH"' >> "$BASH_ENV"
-            source "$BASH_ENV"
             flutter --version
+            flutter doctor -v
 
       - run:
           name: 生成 Android 工程
           command: |
-            source "$BASH_ENV"
             flutter create --platforms=android --project-name=data_analyzer_app .
             rm -rf test
             python3 - \<<'PY'
@@ -37,15 +34,16 @@ jobs:
       - run:
           name: 获取依赖
           command: |
-            source "$BASH_ENV"
             flutter pub get
 
       - run:
           name: 安装 Android 原生构建工具
           command: |
-            sudo apt-get update
-            sudo apt-get install -y ninja-build
-            yes | sdkmanager "cmake;3.22.1"
+            apt-get update
+            apt-get install -y ninja-build cmake
+            yes | sdkmanager "cmake;3.22.1" "ndk;27.0.12077973"
+            echo 'export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"' >> "$BASH_ENV"
+            echo 'export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.0.12077973"' >> "$BASH_ENV"
 
       - run:
           name: 检查代码
