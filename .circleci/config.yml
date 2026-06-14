@@ -59,6 +59,40 @@ jobs:
             echo 'export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.0.12077973"' >> "$BASH_ENV"
 
       - run:
+          name: 修正插件 Android SDK 版本
+          command: |
+            python3 - \<<'PY'
+            from pathlib import Path
+            import os
+            import re
+
+            roots = [Path("android"), Path(os.environ["HOME"]) / ".pub-cache"]
+            patterns = ["**/build.gradle", "**/build.gradle.kts"]
+
+            for root in roots:
+                if not root.exists():
+                    continue
+                for pattern in patterns:
+                    for gradle_file in root.glob(pattern):
+                        try:
+                            content = gradle_file.read_text()
+                        except UnicodeDecodeError:
+                            continue
+
+                        original = content
+                        content = re.sub(r"compileSdk\s*=\s*[^\n]+", "compileSdk = 36", content)
+                        content = re.sub(r"compileSdk\s+\d+", "compileSdk 36", content)
+                        content = re.sub(r"compileSdkVersion\s+\d+", "compileSdkVersion 36", content)
+                        content = re.sub(r"targetSdk\s*=\s*[^\n]+", "targetSdk = 36", content)
+                        content = re.sub(r"targetSdk\s+\d+", "targetSdk 36", content)
+                        content = re.sub(r"targetSdkVersion\s+\d+", "targetSdkVersion 36", content)
+
+                        if content != original:
+                            gradle_file.write_text(content)
+                            print(f"patched {gradle_file}")
+            PY
+
+      - run:
           name: 检查代码
           command: |
             source "$BASH_ENV"
