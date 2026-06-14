@@ -151,7 +151,9 @@ class _HomePageState extends State<HomePage> {
       '${dir.path}/数据分析仪结果_${DateTime.now().millisecondsSinceEpoch}.txt',
     );
     await file.writeAsString(_resultText());
-    await Share.shareXFiles([XFile(file.path)], text: '数据分析仪生成结果');
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], text: '数据分析仪生成结果'),
+    );
   }
 
   String _resultText() {
